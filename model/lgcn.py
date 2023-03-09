@@ -4,6 +4,8 @@ from torch_geometric.nn.conv import LGConv
 import world
 import torch.optim as optim
 from torch_scatter.scatter import scatter
+from tqdm import tqdm
+from utils import minibatch
 
 class LGCNConv(torch.nn.Module):
     def __init__(self, config, dataset):
@@ -19,6 +21,7 @@ class LGCNConv(torch.nn.Module):
         self.all_div[value.long()] = count.float()
         self.all_div[self.all_div==0] = 1e-6
         self.train_edge_div = torch.sqrt(self.all_div[self.train_edge[0]]*self.all_div[self.train_edge[1]]).to(config['device'])
+        self.device = self.config['device']
         
     def forward(self, x):
         device = x.device
@@ -45,6 +48,8 @@ class LightGCN(torch.nn.Module):
         self.layers = nn.ModuleList()
         for i in range(self.num_layers):
             self.layers.append(LGConv())
+            
+        self.device = self.config['device']
         
     def __init_weight(self):
         self.all_embedding = torch.nn.Embedding(num_embeddings=self.num_items+self.num_users, embedding_dim=self.latent_dim)
@@ -100,6 +105,16 @@ class LightGCN(torch.nn.Module):
         loss.backward()
         self.optim.step()
         return loss
+    
+    def OneEpoch(self, user, pos, neg):
+        aver_loss = 0
+        total_batch = len(user)//self.config['bpr_batch_size'] + 1
+        for batch_i, (u, posItem, negItem) in tqdm(enumerate(minibatch(user, pos, neg, batch_size=self.config['bpr_batch_size']))):
+            u, posItem, negItem = u.to(self.device), posItem.to(self.device), negItem.to(self.device)
+            loss = self.stageOne(u, posItem, negItem)
+            aver_loss+=loss
+        aver_loss/=total_batch
+        return aver_loss
 
         
         

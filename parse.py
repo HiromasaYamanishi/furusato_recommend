@@ -3,13 +3,13 @@ import argparse
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Go lightGCN")
-    parser.add_argument('--bpr_batch', type=int,default=2048,
+    parser.add_argument('--bpr_batch', type=int,default=8192,
                         help="the batch size for bpr loss training procedure")
     parser.add_argument('--recdim', type=int,default=64,
                         help="the embedding size of lightGCN")
-    parser.add_argument('--layer', type=int,default=3,
+    parser.add_argument('--layer', type=int,default=2,
                         help="the layer num of lightGCN")
-    parser.add_argument('--lr', type=float,default=0.001,
+    parser.add_argument('--lr', type=float,default=0.0001,
                         help="the learning rate")
     parser.add_argument('--decay', type=float,default=1e-4,
                         help="the weight decay for l2 normalizaton")
@@ -27,12 +27,13 @@ def parse_args():
                         help="available datasets: [furusato]")
     parser.add_argument('--path', type=str,default="./checkpoints",
                         help="path to save weights")
-    parser.add_argument('--topks', nargs='?',default="[20]",
+    parser.add_argument('--topks', nargs='?',default="[10,20]",
                         help="@k test list")
     parser.add_argument('--tensorboard', type=int,default=1,
                         help="enable tensorboard")
-    parser.add_argument('--wandb_name', type=str,
+    parser.add_argument('--wandb', type=str,
                         help='wandb run name')
+    parser.add_argument('--inference', type=str, default='all')
     parser.add_argument('--multi_gpu', action='store_true')
     parser.add_argument('--test', action='store_true')
     parser.add_argument('--device', type=int, default=0)
@@ -43,4 +44,5 @@ def parse_args():
     parser.add_argument('--pretrain', type=int, default=0, help='whether we use pretrained weight or not')
     parser.add_argument('--seed', type=int, default=2020, help='random seed')
     parser.add_argument('--model', type=str, default='lgn', help='rec-model, support [mf, lgn]')
+    parser.add_argument('--train_emb', action='store_true')
     return parser.parse_args()

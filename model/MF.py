@@ -4,6 +4,8 @@ from dataloader import BasicDataset
 from torch import nn
 import numpy as np
 from torch import optim
+from tqdm import tqdm
+from utils import minibatch
 
 
 class BasicModel(nn.Module):    
@@ -40,6 +42,7 @@ class MF(BasicModel):
         self.__init_weight()
         self.optim = optim.Adam(self.parameters(), lr=config['lr'])
         self.config = config
+        self.device = self.config['device']
         
     def __init_weight(self):
         self.embedding_user = torch.nn.Embedding(
@@ -81,6 +84,17 @@ class MF(BasicModel):
         loss.backward()
         self.optim.step()
         return loss
+    
+    def OneEpoch(self, user, pos, neg):
+        aver_loss = 0
+        total_batch = len(user)//self.config['bpr_batch_size'] + 1
+        for batch_i, (u, posItem, negItem) in tqdm(enumerate(minibatch(user, pos, neg, batch_size=self.config['bpr_batch_size']))):
+            u, posItem, negItem = u.to(self.device), posItem.to(self.device), negItem.to(self.device)
+            loss = self.stageOne(u, posItem, negItem)
+            aver_loss+=loss
+        aver_loss/=total_batch
+        return aver_loss
+        
         
 
 class LightGCN(BasicModel):
@@ -225,4 +239,14 @@ class LightGCN(BasicModel):
         loss.backward()
         self.optim.step()
         return loss
+    
+    def OneEpoch(self, user, pos, neg):
+        aver_loss = 0
+        total_batch = len(user)//self.config['bpr_batch_size'] + 1
+        for batch_i, (u, posItem, negItem) in tqdm(enumerate(minibatch(user, pos, neg, batch_size=self.config['bpr_batch_size']))):
+            u, posItem, negItem = u.to(self.device), posItem.to(self.device), negItem.to(self.device)
+            loss = self.stageOne(u, posItem, negItem)
+            aver_loss+=loss
+        aver_loss/=total_batch
+        return aver_loss
         

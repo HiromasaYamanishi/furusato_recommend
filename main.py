@@ -8,7 +8,7 @@ from model.graphsage import GraphSAGE
 MODELS = {
     'mf': MF,
     'lgn': LightGCN,
-    'sage': GraphSAGE
+    'sage': GraphSAGE,
 }
 
 if __name__=='__main__':

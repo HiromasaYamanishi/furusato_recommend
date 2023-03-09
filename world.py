@@ -23,7 +23,7 @@ sys.path.append(join(CODE_PATH, 'sources'))
 
 config = {}
 all_dataset = ['furusato']
-all_models  = ['mf', 'lgn', 'sage']
+all_models  = ['mf', 'lgn', 'sage', 'fastsage', 'fastsagepro', 'fastsagepar', 'fastsagetorch']
 # config['batch_size'] = 4096
 config['bpr_batch_size'] = args.bpr_batch
 config['latent_dim_rec'] = args.recdim
@@ -46,7 +46,9 @@ config['model'] = args.model
 config['recdim'] = args.recdim
 config['layer'] = args.layer
 config['num_neighbors'] = args.num_neighbors
-config['wandb_name'] = args.wandb_name
+config['wandb'] = args.wandb
+config['inference'] = args.inference
+config['train_emb'] = args.train_emb
 
 #GPU = torch.cuda.is_available()
 #device = torch.device('cuda' if GPU else "cpu")

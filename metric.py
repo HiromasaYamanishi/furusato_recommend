@@ -4,6 +4,8 @@ from collections import defaultdict
 import numpy as np
 from sklearn.metrics import roc_auc_score
 from dataloader import BasicDataset
+import itertools
+from sklearn.utils.extmath import cartesian
 
 class Metric:
     def __init__(self, config, dataset):
@@ -88,6 +90,47 @@ def NDCGatK_r(test_data,r,k):
     ndcg[np.isnan(ndcg)] = 0.
     return np.sum(ndcg)
 
+def Diversity(groundTrue, sorted_items, k):
+    product_categories = np.load('./data/cb/product_categories.npy', allow_pickle=True)
+    diversity = 0
+    for items in sorted_items:
+        for i in range(k):
+            for j in range(i+1, k):
+                dist = (1-len(set(product_categories[items[i]])&set(product_categories[items[j]]))/(len(set(product_categories[items[i]])|set(product_categories[items[j]]))+1e-6))
+                diversity+=dist
+    diversity/=((k-1)*k//2)
+    return diversity
+
+def Novelty(sorted_items, n_users, k):
+    oc = np.load('./data/cf/product_occurance.npy')/n_users
+    total_novelty=0
+    for batch_items in sorted_items:
+        for items in batch_items:
+            total_novelty+=np.sum(-np.log2(oc[items[:k]]))/k
+    return total_novelty/-np.log2(1/n_users)
+
+def Unexpectedness(allPos, rating_list, pmi, k):
+    return 1
+    unexp=0
+    i=0
+    for rating_batch in rating_list:
+        for rating in rating_batch:
+            gt = allPos[i]
+            prod = cartesian(gt, rating)
+            for p in prod:
+                unexp+=pmi[p]
+            unexp/=len(prod)
+            i+=1
+            
+    return unexp
+
+def Coverage(rating_list, m_items, k):
+    item_set = set()
+    for rating_batch in rating_list:
+        for rating in rating_batch:
+            item_set.update(set(rating[:k].tolist()))
+    return len(item_set)/m_items
+
 def AUC(all_item_scores, dataset, test_data):
     """
         design for a single user
@@ -98,3 +141,4 @@ def AUC(all_item_scores, dataset, test_data):
     r = r_all[all_item_scores >= 0]
     test_item_scores = all_item_scores[all_item_scores >= 0]
     return roc_auc_score(r, test_item_scores)
+
