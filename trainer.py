@@ -1,3 +1,4 @@
+## for docker
 from tqdm import tqdm
 import time
 import copy
@@ -27,10 +28,12 @@ class Trainer:
         self.config = config
         self.dataset = dataset
         self.metric = Metric(config, dataset)
-        self.sampling = UniformSampling(dataset)
+        self.sampling = UniformSampling(dataset, config)
+        print('setup sample')
         self.device = self.config['device']
+        print(self.device)
         self.model = model
-        self.process_num = 8
+        self.process_num = 4
         self.max_recall = 0
         self.pmi = 0
         #self.model.to(self.device)
@@ -38,17 +41,24 @@ class Trainer:
             self.model = torch.nn.DataParallel(self.model, device_ids=[1,2,3])
         else:
             self.model = self.model.to(self.device)
-            
-        self.product_names = np.load('./data/product_names.npy', allow_pickle=True)
-        self.categories = np.load('./data/cb/product_categories.npy', allow_pickle=True)
+        self.suffix = world.config['suffix']
+        suffix = self.suffix
+        self.product_names = np.load(f'./data/product_names{suffix}.npy', allow_pickle=True)
+        self.categories = np.load(f'./data/cb/product_categories{suffix}.npy', allow_pickle=True)
         print(model)
-        wandb.init('furusato_recommendation', name=config['wandb'])
+        if not world.config['test']:
+            wandb.init('furusato_recommendation', name=config['wandb'])
+        #if multiprocessing.get_start_method() == 'fork':
+        #    multiprocessing.set_start_method('spawn', force=True)
         
         
     def train(self):
-        if multiprocessing.get_start_method()=='spawn':
-            multiprocessing.set_start_method('fork', force=True)
-        S = self.sampling.sample()
+        #if multiprocessing.get_start_method()=='spawn':
+        #    multiprocessing.set_start_method('fork', force=True)
+        if not self.config['multicore']:
+            S = UniformSample(self.dataset)
+        else:
+            S = self.sampling.sample()
         users, posItems, negItems = torch.tensor(S[:, 0]).to(self.device), torch.tensor(S[:, 1]).to(self.device), torch.tensor(S[:, 2]).to(self.device)
         #users, posItems, negItems = UniformSample(self.dataset)
         users, posItems, negItems = shuffle(users, posItems, negItems)
@@ -103,13 +113,19 @@ class Trainer:
             else:
                 users_list, groundTrue_list, rating_list = self.model.getUsersRating(users)
             start_time = time.time()
+            #print(rating_list, groundTrue_list)
+            pre_results = []
             X = zip(rating_list, groundTrue_list)
-            if multiprocessing.get_start_method() == 'fork':
-                multiprocessing.set_start_method('spawn', force=True)
-                print("{} setup done".format(multiprocessing.get_start_method()))
-
-            pool = multiprocessing.Pool(self.process_num)
-            pre_results = pool.map(test_one_batch, X)
+            #if multiprocessing.get_start_method() == 'fork':
+            #    multiprocessing.set_start_method('spawn', force=True)
+            #    print("{} setup done".format(multiprocessing.get_start_method()))
+            if not self.config['multicore']:
+                pre_results = []
+                for x in X:
+                    pre_results.append(test_one_batch(x))
+            else:
+                pool = multiprocessing.Pool(self.process_num)
+                pre_results = pool.map(test_one_batch, X)
             metrics = ['precision', 'recall', 'ndcg', 'hr', 'diversity', 'novelty', 'unexpectedness', 'coverage']
             results = {metric: np.zeros(len(world.topks)) for metric in metrics}
             scale = float(u_batch_size/len(users))
@@ -120,7 +136,7 @@ class Trainer:
             for metric in results.keys():
                 results[metric]/=float(len(users))
             for i,k in enumerate(world.topks):
-                novelty = Novelty(rating_list, self.dataset.n_users, k)
+                novelty = Novelty(rating_list, self.dataset.n_users, k, self.suffix)
                 coverage = Coverage(rating_list, self.dataset.m_items, k)
                 unexpectedness = Unexpectedness(self.dataset.allPos, rating_list, self.pmi, k)
                 results['novelty'][i] = novelty/float(len(users))
@@ -157,7 +173,9 @@ class Trainer:
                                   'predict_id': predict_ids,
                                   'train_id': train_ids})
         model, recdim, layer, inference = self.config['model'], self.config['recdim'], self.config['layer'], self.config['inference']
-        df_save_name = f'./data/result/{model}_{recdim}_{layer}_{inference}.csv'
+        suffix = self.config['suffix']
+        sample_pow, r = self.config['sample_pow'], self.config['r']
+        df_save_name = f'./data/result/{model}_{recdim}_{layer}_{sample_pow}_{r}_{suffix}.csv'
         dataframe.to_csv(df_save_name)
         print('saved result')
             
@@ -179,7 +197,7 @@ class Trainer:
             print(loss)
             if not self.config['test']:
                 wandb.log({'loss':loss.item()})
-            if epoch%10==0:
+            if epoch%self.config['test_span']==0:
                 metrics = self.test()
                 print(metrics)
                 if not self.config['test']:
@@ -202,7 +220,7 @@ def test_one_batch(X):
         recall.append(ret['recall'])
         hr.append(ret['hr'])
         ndcg.append(NDCGatK_r(groundTrue,r,k))
-        diversity.append(Diversity(groundTrue, sorted_items, k))
+        diversity.append(Diversity(groundTrue, sorted_items, k, world.config['suffix']))
     return {'recall':np.array(recall), 
             'precision':np.array(pre), 
             'ndcg':np.array(ndcg),

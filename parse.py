@@ -3,7 +3,7 @@ import argparse
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Go lightGCN")
-    parser.add_argument('--bpr_batch', type=int,default=8192,
+    parser.add_argument('--bpr_batch', type=int,default=2048,
                         help="the batch size for bpr loss training procedure")
     parser.add_argument('--recdim', type=int,default=64,
                         help="the embedding size of lightGCN")
@@ -19,7 +19,7 @@ def parse_args():
                         help="the batch size for bpr loss training procedure")
     parser.add_argument('--a_fold', type=int,default=1000,
                         help="the fold num used to split large adj matrix, like gowalla")
-    parser.add_argument('--num_neighbors', type=int, default=10,
+    parser.add_argument('--num_neighbors', type=int, default=5,
                         help='the number of neighbor nodes graphsage samples one time')
     parser.add_argument('--testbatch', type=int,default=10000,
                         help="the batch size of users for testing")
@@ -40,9 +40,14 @@ def parse_args():
     parser.add_argument('--comment', type=str,default="lgn")
     parser.add_argument('--load', type=int,default=0)
     parser.add_argument('--epochs', type=int,default=1000)
-    parser.add_argument('--multicore', type=int, default=0, help='whether we use multiprocessing or not in test')
+    #parser.add_argument('--multicore', type=int, default=0, help='whether we use multiprocessing or not in test')
     parser.add_argument('--pretrain', type=int, default=0, help='whether we use pretrained weight or not')
     parser.add_argument('--seed', type=int, default=2020, help='random seed')
     parser.add_argument('--model', type=str, default='lgn', help='rec-model, support [mf, lgn]')
     parser.add_argument('--train_emb', action='store_true')
+    parser.add_argument('--sample_pow', type=float, default=0)
+    parser.add_argument('--r', default=0.5, type=float)
+    parser.add_argument('--test_span', default=10, type=int)
+    parser.add_argument('--multicore', action='store_true')
+    parser.add_argument('--suffix', type=str, default='')
     return parser.parse_args()

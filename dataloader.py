@@ -76,8 +76,9 @@ class Loader(BasicDataset):
         self.mode = self.mode_dict['train']
         self.n_user = 0
         self.m_item = 0
-        train_file = path + '/train.txt'
-        test_file = path + '/test.txt'
+        suffix = config['suffix']
+        train_file = path + f'/train{suffix}.txt'
+        test_file = path + f'/test{suffix}.txt'
         self.path = path
         trainUniqueUsers, trainItem, trainUser = [], [], []
         testUniqueUsers, testItem, testUser = [], [], []
@@ -105,9 +106,9 @@ class Loader(BasicDataset):
         self.trainUniqueUsers = np.array(trainUniqueUsers)
         self.trainUser = np.array(trainUser)
         self.trainItem = np.array(trainItem)
-        with open('./data/cf/allPosItem.pkl', 'rb') as f:
+        with open(f'./data/cf/allPosItem{suffix}.pkl', 'rb') as f:
             self.allPosItem = pickle.load(f)
-        with open('./data/cf/allPos.pkl', 'rb') as f:
+        with open(f'./data/cf/allPos{suffix}.pkl', 'rb') as f:
             self._allPos = pickle.load(f)            
 
         with open(test_file) as f:

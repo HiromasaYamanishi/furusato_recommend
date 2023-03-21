@@ -90,7 +90,8 @@ def NDCGatK_r(test_data,r,k):
     ndcg[np.isnan(ndcg)] = 0.
     return np.sum(ndcg)
 
-def Diversity(groundTrue, sorted_items, k):
+def Diversity(groundTrue, sorted_items, k, suffix):
+    #product_categories = np.load(f'./data/cb/product_categories{suffix}.npy', allow_pickle=True)
     product_categories = np.load('./data/cb/product_categories.npy', allow_pickle=True)
     diversity = 0
     for items in sorted_items:
@@ -101,7 +102,8 @@ def Diversity(groundTrue, sorted_items, k):
     diversity/=((k-1)*k//2)
     return diversity
 
-def Novelty(sorted_items, n_users, k):
+def Novelty(sorted_items, n_users, k, suffix):
+    #oc = np.load(f'./data/cf/product_occurance{suffix}.npy')/n_users
     oc = np.load('./data/cf/product_occurance.npy')/n_users
     total_novelty=0
     for batch_items in sorted_items:

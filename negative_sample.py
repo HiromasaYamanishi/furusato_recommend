@@ -4,15 +4,35 @@ from time import time
 from tqdm import tqdm
 from multiprocessing import Pool, Process, Manager
 import torch.multiprocessing as multiprocessing
+import pickle
+import math
 
 class UniformSampling:
-    def __init__(self, dataset: Loader, neg_ratio=1):
+    def __init__(self, dataset: Loader, config, neg_ratio=1):
         #self.dataset = dataset
-        self.process_num = 8
+        self.process_num = 4
         self.m_items = dataset.m_items
         self.n_users = dataset.n_user
         self.user_num = dataset.trainDataSize
         self.allPos = dataset.allPos
+        self.config = config
+        if config['sample_pow']==0.1:
+            with open('./data/sample_prob/sample_prob_01.pkl', 'rb') as f:
+                self.probs = pickle.load(f)
+                
+        elif config['sample_pow'] ==0.2:
+            with open('./data/sample_prob/sample_prob_02.pkl', 'rb') as f:
+                self.probs = pickle.load(f)
+                
+        elif config['sample_pow'] ==0.5:
+            with open('./data/sample_prob/sample_prob_05.pkl', 'rb') as f:
+                self.probs = pickle.load(f)
+                
+        elif config['sample_pow'] ==1:
+            with open('./data/sample_prob/sample_prob_10.pkl', 'rb') as f:
+                self.probs = pickle.load(f)
+                
+                
         
     def sample_parallel(self, process_index, process_num, sample_users, allPos, returned_dict):
         start_index = (len(sample_users)//process_num)*process_index
@@ -27,7 +47,10 @@ class UniformSampling:
             if len(posForUser) == 0:
                 continue
             sample_time2 += time() - start
-            posindex = np.random.randint(0, len(posForUser))
+            if self.config['sample_pow']==0:
+                posindex = np.random.randint(0, len(posForUser))
+            else:
+                posindex = np.random.choice(len(posForUser), p=self.probs[user])
             positem = posForUser[posindex]
             while True:
                 negitem = np.random.randint(0, self.m_items)
@@ -80,14 +103,11 @@ def UniformSample(dataset: Loader, neg_ratio = 1):
     user_num = dataset.trainDataSize
     sample_users = np.random.randint(0, dataset.n_users, user_num)
     allPos = dataset.allPos
-    process_num=8
-    start_index = (sample_users//process_num)*i
-    end_index = min(sample_users//process_num)*(i+1)
     S = []
     sample_time1 = 0.
     sample_time2 = 0.
     users, posItems, negItems = [],[],[]
-    for i, user in tqdm(enumerate(sample_users[start_index:end_index])):
+    for i, user in tqdm(enumerate(sample_users)):
         start = time()
         posForUser = allPos[user]
         if len(posForUser) == 0:
@@ -101,11 +121,11 @@ def UniformSample(dataset: Loader, neg_ratio = 1):
                 continue
             else:
                 break
-        users.append(user)
-        posItems.append(positem)
-        negItems.append(negitem)
+        #users.append(user)
+        #posItems.append(positem)
+        #negItems.append(negitem)
         S.append([user, positem, negitem])
         end = time()
         sample_time1 += end - start
     total = time() - total_start
-    return np.array(users), np.array(posItems), np.array(negItems)
+    return np.array(S)

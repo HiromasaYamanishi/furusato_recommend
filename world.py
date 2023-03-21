@@ -23,7 +23,7 @@ sys.path.append(join(CODE_PATH, 'sources'))
 
 config = {}
 all_dataset = ['furusato']
-all_models  = ['mf', 'lgn', 'sage', 'fastsage', 'fastsagepro', 'fastsagepar', 'fastsagetorch']
+all_models  = ['mf', 'lgn', 'sage', 'radj', 'pinsage', 'textsage']
 # config['batch_size'] = 4096
 config['bpr_batch_size'] = args.bpr_batch
 config['latent_dim_rec'] = args.recdim
@@ -40,6 +40,7 @@ config['A_split'] = True
 config['bigdata'] = False
 device = args.device
 config['device'] = f'cuda:{device}'
+#config['device'] = 'cpu'
 config['multi_gpu'] = args.multi_gpu
 config['test'] = args.test
 config['model'] = args.model
@@ -49,6 +50,11 @@ config['num_neighbors'] = args.num_neighbors
 config['wandb'] = args.wandb
 config['inference'] = args.inference
 config['train_emb'] = args.train_emb
+config['sample_pow'] = args.sample_pow
+config['test_span'] = args.test_span
+config['r'] = args.r
+config['multicore'] = args.multicore
+config['suffix'] = args.suffix
 
 #GPU = torch.cuda.is_available()
 #device = torch.device('cuda' if GPU else "cpu")

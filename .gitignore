@@ -3,3 +3,4 @@ checkpoints
 wandb
 __pycache__
 model/__pycache__
+librec

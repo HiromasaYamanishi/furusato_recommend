@@ -24,7 +24,7 @@ def get_indice_offset(l):
         lens.append(len(_))
     return indice, compute_offsets(lens)
         
-class GraphSAGE(torch.nn.Module):
+class PinSAGE(torch.nn.Module):
     def __init__(self, config, dataset):
         super().__init__()
         suffix = config['suffix']
@@ -117,16 +117,6 @@ class GraphSAGE(torch.nn.Module):
         neg_x[neg_user_index] = torch.cat([self.user_id_embeddings(neg_user.to(self.device)),self.user_proj(torch.mean(self.user_feature_embeddings(torch.from_numpy(self.user_features[neg_user]).to(self.device)), dim=1))],dim=1)
         neg_x[neg_item_index] = torch.cat([self.item_id_embeddings(neg_item.to(self.device)), self.item_proj(torch.cat([torch.mean(self.item_feature_embeddings(torch.from_numpy(self.item_features[neg_item]).to(self.device)), dim=1), self.item_text_features[neg_item]], dim=1))], dim=1)
         return user_x, pos_x, neg_x
-    
-    def get_text_embedding(self, index, mode='user'):
-        return 0
-    
-    def get_id_embedding(self, index, mode='user'):
-        if mode=='user':
-            return self.user_id_embeddings(index.to(self.device))
-        
-        elif mode=='item':
-            return self.item_id_embedding(index.to(self.device))
         
     def forward(self, x, adjs):
         #neighbors: [batch(item), batch*neighbor_size(user), batch*neighbor_size^2(item)]
@@ -139,9 +129,13 @@ class GraphSAGE(torch.nn.Module):
             out = torch.zeros((size[1], source_x.size(1))).to(self.device)
             aggr = scatter(source_x, edge_index[1], dim=0, out=out, reduce='mean')
             x = self.w_linears[i](torch.cat([target_x, aggr], dim=1))
-            if i!=self.num_layers-1:
-                x = x.relu()
-        return x
+            x = F.relu(self.v_linears[i](x))
+            x_norm = x.norm(dim=1, keepdim=True)
+            default_norm = torch.tensor(1.0).to(x_norm)
+            x_norm = torch.where(x_norm == 0, default_norm, x_norm)
+            x = x/x_norm
+
+        return self.G2(F.relu(self.G1(x)))
 
             
     def loss(self, user_emb: torch.Tensor, pos_emb: torch.Tensor, neg_emb:torch.Tensor):
@@ -159,11 +153,11 @@ class GraphSAGE(torch.nn.Module):
         pos = pos + self.n_user
         neg = neg + self.n_user
         user_loader = NeighborSampler(self.edge_index, node_idx=user, sizes=[self.num_neighbors for _ in range(self.num_layers)],
-                                      batch_size=self.config['bpr_batch_size'], shuffle=False, num_workers=8)
+                                      batch_size=self.config['bpr_batch_size'], shuffle=False, num_workers=16)
         pos_loader = NeighborSampler(self.edge_index, node_idx=pos, sizes=[self.num_neighbors for _ in range(self.num_layers)],
-                                batch_size=self.config['bpr_batch_size'], shuffle=False, num_workers=8)
+                                batch_size=self.config['bpr_batch_size'], shuffle=False, num_workers=16)
         neg_loader = NeighborSampler(self.edge_index, node_idx=neg, sizes=[self.num_neighbors, self.num_neighbors],
-                                batch_size=self.config['bpr_batch_size'], shuffle=False, num_workers=8)
+                                batch_size=self.config['bpr_batch_size'], shuffle=False, num_workers=16)
         total_batch = len(user)//self.config['bpr_batch_size'] + 1
         aver_loss = 0
         user_init_x, item_init_x = self.get_initial_embedding()
@@ -209,51 +203,21 @@ class GraphSAGE(torch.nn.Module):
                 item_x_agg = scatter(user_x_all, trainItem, out=item_out, dim=0, reduce='mean')
                 user_x = self.w_linears[i](torch.cat([user_x, user_x_agg], dim=1))
                 item_x = self.w_linears[i](torch.cat([item_x, item_x_agg], dim=1))
-                if i!=self.num_layers-1:
-                    item_x = item_x.relu()
-                    user_x = user_x.relu()
+                item_x = F.relu(self.v_linears[i](item_x))
+                item_x_norm = item_x.norm(dim=1, keepdim=True)
+                default_norm = torch.tensor(1.0).to(item_x_norm)
+                item_x_norm = torch.where(item_x_norm == 0, default_norm, item_x_norm)
+                item_x = item_x/item_x_norm
+                user_x = F.relu(self.v_linears[i](user_x))
+                user_x_norm = user_x.norm(dim=1, keepdim=True)
+                default_norm = torch.tensor(1.0).to(user_x_norm)
+                user_x_norm = torch.where(user_x_norm == 0, default_norm, user_x_norm)
+                user_x = user_x/user_x_norm
+                user_x = self.G2(F.relu(self.G1(user_x)))
+                item_x = self.G2(F.relu(self.G1(item_x)))
 
             rating = torch.matmul(user_x[users], item_x.T)
             return rating 
-        
-        elif self.config['inference']=='sample':
-            all_item = torch.arange(self.n_user, self.n_user+self.m_item)
-            user_initial_emb, item_initial_emb = self.get_initial_embedding()
-            x = torch.cat([user_initial_emb, item_initial_emb], dim=0)
-            item_emb_all = []
-            if self.test_item_emb==None:
-                print('sample item first')
-                item_sampler = NeighborSampler(self.edge_index, node_idx=all_item, sizes=[self.num_neighbors for _ in range(self.num_layers)],
-                            batch_size=self.config['test_u_batch_size'], shuffle=False, num_workers=8)
-                for (item_batch_size, item_id, item_adjs) in item_sampler:
-                    adj = [adj.to(self.device) for adj in item_adjs]
-                    item_emb = self.forward(x[item_id], adj)
-                    item_emb_all.append(item_emb)
-                self.test_item_emb = torch.cat(item_emb_all, dim=0)
-            
-            user_sampler = NeighborSampler(self.edge_index, node_idx=torch.tensor(users), sizes=[self.num_neighbors*5 for _ in range(self.num_layers)],
-                            batch_size=self.config['test_u_batch_size'], shuffle=False, num_workers=8)
-            rating_list, groundTrue_list = [], []
-            users_list = []
-            for (user_batch_size, user_id, user_adjs) in tqdm(user_sampler):
-                exclude_index = []
-                exclude_items = []
-                allPos = self.dataset.getUserPosItems(user_id[:user_batch_size])
-                for range_i, items in enumerate(allPos):
-                    exclude_index.extend([range_i] * len(items))
-                    exclude_items.extend(items)
-                adj = [adj.to(self.device) for adj in user_adjs]
-                user_emb = self.forward(x[user_id], adj)
-                rating = torch.matmul(user_emb, self.test_item_emb.T)
-                rating = rating.cpu()
-                
-                _, rating_K = torch.topk(rating, k=max(world.topks))
-                del rating
-                rating_list.append(rating_K.cpu())
-                groundTrue_list.append([self.dataset.testDict[u.item()] for u in user_id[:user_batch_size]])
-                users_list.append(list(user_id[:user_batch_size]))
-                #user_emb_all.append(user_emb)
-            return users_list, groundTrue_list, rating_list
             
     
         

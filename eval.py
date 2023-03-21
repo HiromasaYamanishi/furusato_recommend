@@ -6,15 +6,14 @@ from model.lgcn import LightGCN
 from model.graphsage import GraphSAGE
 from model.radj import rAdjGCN
 from model.pinsage import PinSAGE
-from model.textsage import TextSAGE
+import torch
 #import register
 MODELS = {
     'mf': MF,
     'lgn': LightGCN,
     'sage': GraphSAGE,
     'radj': rAdjGCN,
-    'pinsage':PinSAGE,
-    'textsage': TextSAGE
+    'pinsage':PinSAGE
 }
 
 if __name__=='__main__':
@@ -22,6 +21,9 @@ if __name__=='__main__':
     print(dataset.n_users)
     print(dataset.trainDataSize)
     model = MODELS[world.model_name](world.config, dataset)
+    model.load_state_dict(torch.load('/home/yamanishi/project/furusato_recommend/checkpoints/mf/64_3.pth'))
+    model.eval()
     trainer = Trainer(world.config, dataset, model)
-    trainer.train_epoch()
+    results = trainer.test()
+    print(results)
     
