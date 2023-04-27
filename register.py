@@ -1,8 +1,9 @@
-import world
+from pprint import pprint
+
 import dataloader
 import model
 import utils
-from pprint import pprint
+import world
 from model.MF import MF, LightGCN
 
 #if world.dataset in ['gowalla', 'yelp2018', 'amazon-book']:

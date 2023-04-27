@@ -1,6 +1,8 @@
 import torch
-from torch.multiprocessing import Queue, Lock, Process, JoinableQueue
-from producer_consumer import producer, consumer, Model
+from torch.multiprocessing import JoinableQueue, Lock, Process, Queue
+
+from producer_consumer import Model, consumer, producer
+
 if __name__=='__main__':
     if torch.multiprocessing.get_start_method() == 'fork':
         torch.multiprocessing.set_start_method('spawn', force=True)

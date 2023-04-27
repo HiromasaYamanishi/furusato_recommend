@@ -1,6 +1,8 @@
-import world
 import numpy as np
 import torch
+
+import world
+
 
 def minibatch(*tensors, **kwargs):
 
@@ -46,6 +48,6 @@ def getLabel(test_data, pred_data):
     return np.array(r).astype('float')
 
 def join_list(list_list):
-    if isinstance(list_list[0][0], int) or isinstance(list_list[0][0], float) or isinstance(list_list[0][0], np.int64) or isinstance(list_list[0][0], torch.Tensor):
-        list_list = [[str(l) for l in ll] for ll in list_list]
+    #if isinstance(list_list[0][0], int) or isinstance(list_list[0][0], float) or isinstance(list_list[0][0], np.int64) or isinstance(list_list[0][0], torch.Tensor):
+    list_list = [[str(l) for l in ll] for ll in list_list]
     return [' '.join(l) for l in list_list]

@@ -1,17 +1,20 @@
 import os
-from os.path import join
+import pickle
 import sys
-import torch
+from os.path import join
+from time import time
+
 import numpy as np
 import pandas as pd
-from torch.utils.data import Dataset, DataLoader
-from scipy.sparse import csr_matrix
 import scipy.sparse as sp
+import torch
+from scipy.sparse import csr_matrix
+from torch.utils.data import DataLoader, Dataset
+from tqdm import tqdm
+
 import world
 from world import cprint
-from time import time
-import pickle
-from tqdm import tqdm
+
 
 class BasicDataset(Dataset):
     def __init__(self):
@@ -77,14 +80,15 @@ class Loader(BasicDataset):
         self.n_user = 0
         self.m_item = 0
         suffix = config['suffix']
-        train_file = path + f'/train{suffix}.txt'
-        test_file = path + f'/test{suffix}.txt'
+        train_file = path + f'/{suffix}/train{suffix}.txt'
+        test_file = path + f'/{suffix}/test{suffix}.txt'
         self.path = path
         trainUniqueUsers, trainItem, trainUser = [], [], []
         testUniqueUsers, testItem, testUser = [], [], []
         allPos = []
         self.traindataSize = 0
         self.testDataSize = 0
+
 
         with open(train_file) as f:
             for l in tqdm(f.readlines()):
@@ -93,12 +97,28 @@ class Loader(BasicDataset):
                     items = [int(i) for i in l[1:]]
                     uid = int(l[0])
                     trainUniqueUsers.append(uid)
-                    trainUser.extend([uid] * len(items))
-                    trainItem.extend(items)
+                    if config['for_lgbm']:
+                        valid_len = int(len(items)*config['lgbm_ratio']/0.7)
+                        train_len = len(items)-valid_len
+                        trainUser.extend([uid]*train_len)
+                        trainItem.extend(items[:train_len])
+                        self.traindataSize += train_len
+                    else:
+                        if config['cold_start'] and uid<10000:
+                            train_length = uid//2000
+                            trainUser.extend([uid]*train_length)
+                            trainItem.extend(items[:train_length])
+                            testUser.extend([uid]*(len(items)-train_length))
+                            testItem.extend(items[train_length:])
+                            self.traindataSize+= train_length
+                        else:
+                            trainUser.extend([uid] * len(items))
+                            trainItem.extend(items)
+                            self.traindataSize += len(items)
                     allPos.append(np.array(items))
                     self.m_item = max(self.m_item, max(items))
                     self.n_user = max(self.n_user, uid)
-                    self.traindataSize += len(items)
+
                 if uid==100:
                     if config['test']:
                         break
@@ -106,10 +126,12 @@ class Loader(BasicDataset):
         self.trainUniqueUsers = np.array(trainUniqueUsers)
         self.trainUser = np.array(trainUser)
         self.trainItem = np.array(trainItem)
-        with open(f'./data/cf/allPosItem{suffix}.pkl', 'rb') as f:
-            self.allPosItem = pickle.load(f)
-        with open(f'./data/cf/allPos{suffix}.pkl', 'rb') as f:
-            self._allPos = pickle.load(f)            
+        self._allPos = allPos
+        self.allPosItem = []
+        #with open(f'./data/cf/allPosItem{suffix}.pkl', 'rb') as f:
+        #    self.allPosItem = pickle.load(f)
+        #with open(f'./data/cf/allPos{suffix}.pkl', 'rb') as f:
+        #    self._allPos = pickle.load(f)            
 
         with open(test_file) as f:
             for l in tqdm(f.readlines()):

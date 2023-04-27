@@ -1,8 +1,9 @@
 import world
 from dataloader import Loader
-from trainer import Trainer
-from model.MF import MF#, LightGCN
 from model.lgcn import LightGCN
+from model.MF import MF  # , LightGCN
+from trainer import Trainer
+
 #import register
 MODELS = {
     'mf': MF,

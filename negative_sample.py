@@ -1,11 +1,14 @@
-from dataloader import BasicDataset, Loader
-import numpy as np
-from time import time
-from tqdm import tqdm
-from multiprocessing import Pool, Process, Manager
-import torch.multiprocessing as multiprocessing
-import pickle
 import math
+import pickle
+from multiprocessing import Manager, Pool, Process
+from time import time
+
+import numpy as np
+import torch.multiprocessing as multiprocessing
+from tqdm import tqdm
+
+from dataloader import BasicDataset, Loader
+
 
 class UniformSampling:
     def __init__(self, dataset: Loader, config, neg_ratio=1):

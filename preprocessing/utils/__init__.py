@@ -1,0 +1,1 @@
+from .partner_merge import PartnerMerge

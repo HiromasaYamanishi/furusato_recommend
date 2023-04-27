@@ -5,3 +5,6 @@ LibRecommender
 tqdm
 pyyaml
 scikit-learn
+janome
+MeCab
+gensim

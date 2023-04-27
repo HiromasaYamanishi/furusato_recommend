@@ -1,27 +1,28 @@
 ## for docker
-from tqdm import tqdm
-import time
 import copy
 import math
 import os
-import yaml
 import sys
+import time
+from multiprocessing import Manager, Pool, Process
+
+import numpy as np
+import pandas as pd
 import torch
+import torch.multiprocessing as multiprocessing
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from utils import minibatch, shuffle, getLabel
-from negative_sample import UniformSample, UniformSampling
-import world
-from metric import Metric,RecallPrecision_ATk, NDCGatK_r, Diversity, Coverage, Novelty, Unexpectedness
-from multiprocessing import Manager, Pool, Process
-import torch.multiprocessing as multiprocessing
-import numpy as np
-import pandas as pd
-import utils
-from utils import join_list
-import wandb
+import yaml
+from tqdm import tqdm
 
+import utils
+import wandb
+import world
+from metric import (Coverage, Diversity, Metric, NDCGatK_r, Novelty,
+                    RecallPrecision_ATk, Unexpectedness)
+from negative_sample import UniformSample, UniformSampling
+from utils import getLabel, join_list, minibatch, shuffle
 
 class Trainer:
     def __init__(self, config, dataset, model):
@@ -43,10 +44,10 @@ class Trainer:
             self.model = self.model.to(self.device)
         self.suffix = world.config['suffix']
         suffix = self.suffix
-        self.product_names = np.load(f'./data/product_names{suffix}.npy', allow_pickle=True)
-        self.categories = np.load(f'./data/cb/product_categories{suffix}.npy', allow_pickle=True)
+        self.product_names = np.load(f'./data/{suffix}/product_names{suffix}.npy', allow_pickle=True)
+        self.categories = np.load(f'./data/cb/{suffix}/product_categories{suffix}.npy', allow_pickle=True)
         print(model)
-        if not world.config['test']:
+        if not world.config['test'] and self.config['suffix']!='22_12_10':
             wandb.init('furusato_recommendation', name=config['wandb'])
         #if multiprocessing.get_start_method() == 'fork':
         #    multiprocessing.set_start_method('spawn', force=True)
@@ -78,6 +79,38 @@ class Trainer:
         '''
 
         return loss
+    
+    def get_topk_list(self, k=50):
+        self.model.eval()
+        dataset = self.dataset
+        users = list(dataset.testDict.keys())
+        u_batch_size = world.config['test_u_batch_size']
+        users_list, rating_list, groundTrue_list = [], [], []
+        total_batch = len(users) // u_batch_size + 1
+        with torch.no_grad():
+            if not self.config['inference']=='sample':
+                for batch_users in tqdm(minibatch(users, batch_size=u_batch_size)):
+                    allPos = dataset.getUserPosItems(batch_users)
+                    groundTrue = [dataset.testDict[u] for u in batch_users]
+                    batch_users_gpu = torch.Tensor(batch_users).long()
+                    batch_users_gpu = batch_users_gpu.to(world.device)
+
+                    rating = self.model.getUsersRating(batch_users_gpu)
+                    #rating = rating.cpu()
+                    exclude_index = []
+                    exclude_items = []
+                    for range_i, items in enumerate(allPos):
+                        exclude_index.extend([range_i] * len(items))
+                        exclude_items.extend(items)
+                    rating[exclude_index, exclude_items] = -(1<<10)
+                    _, rating_K = torch.topk(rating, k=k)
+                    rating = rating.cpu().numpy()
+                    del rating
+                    users_list.append(batch_users)
+                    rating_list.append(rating_K.cpu())
+                    groundTrue_list.append(groundTrue)
+                    #assert total_batch == len(users_list)
+        return rating_list
     
     def test(self):
         self.model.eval()
@@ -148,7 +181,10 @@ class Trainer:
             self.save_result(users_list, rating_list, groundTrue_list)
             self.model.test_item_emb = None
             print(time.time()- start_time)
-            return results
+            if self.config['cold_start']:
+                return results, pre_results[0]
+            else:
+                return results
         
     def save_result(self, users_list, rating_list, groundTrue_list):
         allPos = self.dataset.allPos
@@ -173,34 +209,50 @@ class Trainer:
                                   'predict_id': predict_ids,
                                   'train_id': train_ids})
         model, recdim, layer, inference = self.config['model'], self.config['recdim'], self.config['layer'], self.config['inference']
+        wandb = self.config['wandb']
         suffix = self.config['suffix']
-        sample_pow, r = self.config['sample_pow'], self.config['r']
-        df_save_name = f'./data/result/{model}_{recdim}_{layer}_{sample_pow}_{r}_{suffix}.csv'
+        df_save_name = f'./data/result/{model}/{model}_{recdim}_{layer}_{wandb}.csv'
         dataframe.to_csv(df_save_name)
         print('saved result')
             
             
-        
-    def save_model(self):
-        model, recdim, layer = self.config['model'], self.config['recdim'], self.config['layer']
+    @staticmethod
+    def checkpoint_save_path(config):
+        model, recdim, layer, suffix, wandb =config['model'],config['recdim'], config['layer'], config['suffix'], config['wandb']
         save_dir=os.path.join('/home/yamanishi/project/furusato_recommend/checkpoints', model)
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
-        save_path = os.path.join(save_dir, f'{recdim}_{layer}.pth')
+        save_path = os.path.join(save_dir, f'{recdim}_{layer}_{suffix}_{wandb}.pth')
+        if config['for_lgbm']:
+            ratio = 0.7-config['lgbm_ratio']
+            save_path= os.path.join(save_dir, f'{recdim}_{layer}_{ratio}_{suffix}.pth')
+        return save_path
+            
+    def save_model(self):
+        save_path = Trainer.checkpoint_save_path(self.config)
         torch.save(self.model.state_dict(), save_path)
         print('saved model')
         
     
     def train_epoch(self):
+        self.test()
         for epoch in range(world.TRAIN_epochs):
             loss = self.train()
             print(loss)
-            if not self.config['test']:
+            if not self.config['test'] and self.config['suffix']!='22_12_10':
                 wandb.log({'loss':loss.item()})
             if epoch%self.config['test_span']==0:
-                metrics = self.test()
+                if not self.config['cold_start']:
+                    metrics = self.test()
+                else:
+                    metrics, cold_result = self.test()
+                    print(metrics, cold_result)
+                    if not self.config['test'] and self.config['suffix']!='22_12_10':
+                        for i, k in enumerate(world.topks):
+                            cold_metrics_tmp = {f'cold_{metric}@{k}': cold_result[metric][i]/self.config['test_u_batch_size'] for metric in cold_result.keys()}
+                            wandb.log(cold_metrics_tmp)
                 print(metrics)
-                if not self.config['test']:
+                if not self.config['test'] and self.config['suffix']!='22_12_10':
                     for i, k in enumerate(world.topks):
                         metrics_tmp = {f'{metric}@{k}': metrics[metric][i] for metric in metrics.keys()}
                         wandb.log(metrics_tmp)

@@ -1,11 +1,14 @@
-import torch
-from typing import Dict, List, Union
-from collections import defaultdict
-import numpy as np
-from sklearn.metrics import roc_auc_score
-from dataloader import BasicDataset
 import itertools
+from collections import defaultdict
+from typing import Dict, List, Union
+
+import numpy as np
+import torch
+from sklearn.metrics import roc_auc_score
 from sklearn.utils.extmath import cartesian
+
+from dataloader import BasicDataset
+
 
 class Metric:
     def __init__(self, config, dataset):
@@ -43,7 +46,16 @@ class Metric:
                     
         aggregate_dict = {k:v/total_length for k,v in aggregate_dict.items()}
         return aggregate_dict           
-            
+ 
+def getLabel(test_data, pred_data):
+    r = []
+    for i in range(len(test_data)):
+        groundTrue = test_data[i]
+        predictTopK = pred_data[i]
+        pred = list(map(lambda x: x in groundTrue, predictTopK))
+        pred = np.array(pred).astype("float")
+        r.append(pred)
+    return np.array(r).astype('float')           
         
 def RecallPrecision_ATk(test_data, r, k):
     """
@@ -54,7 +66,7 @@ def RecallPrecision_ATk(test_data, r, k):
     right_pred = r[:, :k].sum(1)
     precis_n = k
     recall_n = np.array([len(test_data[i]) for i in range(len(test_data))])
-    recall = np.sum(right_pred/recall_n)
+    recall = np.sum(right_pred/(recall_n+1e-6))
     precis = np.sum(right_pred)/precis_n
     hr = np.sum(right_pred>=1)
     return {'recall': recall, 'precision': precis, 'hr': hr}
@@ -102,9 +114,10 @@ def Diversity(groundTrue, sorted_items, k, suffix):
     diversity/=((k-1)*k//2)
     return diversity
 
-def Novelty(sorted_items, n_users, k, suffix):
+def Novelty(sorted_items, n_users, k, suffix, oc=None):
     #oc = np.load(f'./data/cf/product_occurance{suffix}.npy')/n_users
-    oc = np.load('./data/cf/product_occurance.npy')/n_users
+    if oc==None:
+        oc = np.load('./data/cf/product_occurance.npy')/n_users
     total_novelty=0
     for batch_items in sorted_items:
         for items in batch_items:

@@ -11,7 +11,7 @@ def parse_args():
                         help="the layer num of lightGCN")
     parser.add_argument('--lr', type=float,default=0.0001,
                         help="the learning rate")
-    parser.add_argument('--decay', type=float,default=1e-4,
+    parser.add_argument('--decay', type=float,default=1e-7,
                         help="the weight decay for l2 normalizaton")
     parser.add_argument('--dropout', type=int,default=0,
                         help="using the dropout or not")
@@ -50,4 +50,12 @@ def parse_args():
     parser.add_argument('--test_span', default=10, type=int)
     parser.add_argument('--multicore', action='store_true')
     parser.add_argument('--suffix', type=str, default='')
+    parser.add_argument('--multi_relational', type=str, default='add')
+    parser.add_argument('--conv', type=str, default='gcn')
+    parser.add_argument('--for_lgbm', action='store_true')
+    parser.add_argument('--lgbm_ratio', type=float, default=0.1)
+    parser.add_argument('--cold_start', action='store_true')
+    parser.add_argument('--user_feature', type=str, default='ntw', help='user feature must in ncwt')
+    parser.add_argument('--item_feature', type=str, default='ntw', help='item feature must in ncwtsr')
+    parser.add_argument('--factorization', action='store_true')
     return parser.parse_args()

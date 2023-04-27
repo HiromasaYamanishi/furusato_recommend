@@ -1,9 +1,11 @@
 import itertools
 import operator
-import numpy as np
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from multiprocessing import Manager
+
+import numpy as np
 import torch
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
+
 
 def compute_offsets(neighbor_lens):
     cumsum = list(itertools.accumulate(neighbor_lens, operator.add))

@@ -1,5 +1,11 @@
-import torch, os, random, time
-from torch.multiprocessing import JoinableQueue, Process, Lock, Queue
+import os
+import random
+import time
+
+import torch
+from torch.multiprocessing import JoinableQueue, Lock, Process, Queue
+
+
 class Model(torch.nn.Module):
     def __init__(self, device):
         super().__init__()
